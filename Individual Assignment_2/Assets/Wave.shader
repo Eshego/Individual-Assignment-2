@@ -6,12 +6,14 @@ Shader "Custom/Wave"
         _Tint("Colour Tint", Color) = (1,1,1,1)
         _Frequency("Frequency", Range(0,5)) = 3
         _Speed("Speed", Range(0, 100)) = 10
+        _RampTexture("Ramp Texture", 2D) = "white"{}
         _Amp("Amplitude", Range(0,1)) = 0.5
+        _Smoothness("Ramp Smoothness", Range(0, 1)) = 0.5
     }
     SubShader
     {
         CGPROGRAM
-        #pragma surface surf Lambert vertex:vert
+        #pragma surface surf ToonRamp vertex:vert
 
         struct Input
         {
@@ -19,10 +21,12 @@ Shader "Custom/Wave"
             float3 vertColor;
         };
 
+        sampler2D _RampTexture;
         float4 _Tint;
         float _Frequency;
         float _Speed;
         float _Amp;
+        float _Smoothness;
 
         struct appdata {
             float4 vertex: POSITION;
@@ -32,12 +36,25 @@ Shader "Custom/Wave"
             float4 texcoord2: TEXCOORD2;
         };
 
+        float4 LightingToonRamp(SurfaceOutput s, fixed3 lightDir, fixed atten)
+        {
+            float diff = (dot(s.Normal, lightDir) * 0.5 + 0.5) * atten;
+            float2 rh = diff;
+            float3 ramp = tex2D(_RampTexture, rh).rgb;
+            float4 c;
+            c.rgb = s.Albedo * _LightColor0.rgb * (ramp * _Smoothness);
+            c.a = s.Alpha;
+            return c;
+        }
+
         void vert(inout appdata v, out Input o) {
             UNITY_INITIALIZE_OUTPUT(Input, o);
-            float t = _Time * _Speed;
-            float waveHeight = sin(t + v.vertex.x * _Frequency) * _Amp + sin(t * 2 + v.vertex.z * _Frequency * 2) * _Amp;
-            v.vertex.y = v.vertex.y + waveHeight;
-            v.normal = normalize(float3(v.normal.x + waveHeight, v.normal.y, v.normal.z + waveHeight));
+            float t = _Time.y * _Speed;
+            float waveHeightX = ((_Amp * (step(0.5, (t + v.vertex.x * _Frequency) % 1.0) * 2.0 - 1.0)) * 2.0);
+            float waveHeightZ = ((_Amp * (step(0.5, (t + v.vertex.z * _Frequency) % 1.0) * 2.0 - 1.0)) * 2.0);
+            float waveHeight = waveHeightX + waveHeightZ;
+            v.vertex.y += waveHeight;
+            v.normal = normalize(v.normal + float3(waveHeightX, 0, waveHeightZ));
             o.vertColor = waveHeight + 2;
         }
         sampler2D _MainTexture;
